@@ -1,7 +1,0 @@
-"0","churn_xg <- churn_oc %>% 
-  select(-term_read_code & -term_reas_descm & -newacct_no) 
-"
-"2","Error: Can't subset columns that don't exist.
-[31mx[39m Column `term_reas_descm` doesn't exist.
-[90mRun `rlang::last_error()` to see where the error occurred.[39m
-"

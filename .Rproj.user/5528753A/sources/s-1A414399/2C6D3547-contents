@@ -20,6 +20,8 @@ library(scales)
 library(RColorBrewer)
 library(corrplot)
 library(Hmisc)
+library(survival)
+library(survminer)
 ```
 
 TRY TO AUTOMAICALLY ACCESS FILE FROM KAGGLE.
@@ -71,40 +73,65 @@ churn_tr %>%
   lapply(length)
 ```
 
-Some variables are not explained and just said that they can be ignored. I will remove some of them here. Two of them have 0 variance as said. 
+Some variables are not explained and the metadata says that they can be ignored. I will remove some of them here. Two of them have 0 variance as said. 
 ```{r}
 churn_tr <- churn_tr %>% 
   select(-bill_cycl & -serv_type & -line_stat) #getting rid of variable with no variance
 ```
 
-We will cut out people whose contract hasn't ended yet because they cannot reasonably be expected to churn. So we are only focusing on people whose contract has ended.
+Since the dataset seems to be built in a way where the people whos contract isn't over yet, are put down for tenure for the full contract duration (even in the future as expected) i have to remove from those people the number of rows that predict them staying for the full duration. THis will keep them in the data as survivors (because they havent churned up until this point).
 ```{r}
 churn_tr <- churn_tr %>% 
-  filter(ce_expiry < 0)
+  filter(ce_expiry >= 0) %>% 
+  group_by(newacct_no) %>% 
+  filter(row_number() < contract_month-ce_expiry)
 ```
+
+```{r}
+churn_tr %>% 
+  ggplot(aes(x = churn,y = ce_expiry, fill = churn)) 
+  geom_boxplot()
+```
+
+```{r}
+churn_oc %>% 
+  filter(tenure < contract_month)
+```
+
+
+```{r}
+churn_tr %>% 
+  filter(newacct_no == "70082185.001.000000083")
+```
+
 
 Putting the dataset in more workable format and doing some feature engineering below. 
 
 Some notes:  
-1) Removing customers who passed away
-2) I will use average secured revenue per month for each client
-3) I will use average complaints per month for each client
-4) I Will not use variables image, contract dates (features extracted from them are used), and current_mth_churn, because they don't seem to give any additional information
-5) Bandwidth will be coded as ordinal variable because it can be concidered a variable where each package is "better" or "higher" than the previous one
+1) Since the dataset seems to be built in a way where the people whos contract isn't over yet, are put down for tenure for the full contract duration i have to remove from those people the number of rows that show the futuren. This will keep them in the data as survivors (because they havent churned up until this point).  
+1) Going to use total revenue produced for each customer as a feature  
+3) I will use total complaints for each client  
+4) I Will not use variables image, contract dates (features extracted from them are used), and current_mth_churn, because they don't seem to give any additional information  
+5) Bandwidth will be coded as ordinal variable because it can be concidered a variable where each package is "better" or "higher" than the previous one  
 ```{r}
 churn_oc <- churn_tr %>%
+  filter(ce_expiry < 0) %>% #remove all customers who contract expiry is in the future
+  add_row(churn_tr %>% #put back some rows (up until data collection point) from the customers who i removed
+    filter(ce_expiry >= 0) %>% 
+    group_by(newacct_no) %>% 
+    filter(row_number() < contract_month-ce_expiry)) %>% 
   filter(complaint_cnt %in% c("0","1", "2", "3", "4", "5", "6", "7")) %>% 
   mutate(complaint_cnt = as.numeric(complaint_cnt)) %>% 
-  group_by(newacct_no) %>%
+  group_by(newacct_no) %>% 
   summarise(churn = first(churn), #is churned or not
             term_read_code = last(term_reas_code), #termination reason code
             term_reas_desc = last(term_reas_desc), #termination reason description  
-            tenure = (max(tenure)-min(tenure)), #Tenure
+            tenure = (max(tenure)-min(tenure)+1), #Tenure
             contract_month = first(contract_month), #contract length
-            ce_expiry = first(ce_expiry), #ifference between contract and jan 2020
-            secured_revenue = mean(secured_revenue), #log average revenue (could also use total revenue)
+            ce_expiry = first(ce_expiry), #difference between contract and jan 2020
+            secured_revenue = sum(secured_revenue), #total revenue
             last_band = last(bandwidth), #last known bandwidth
-            complaint_avg = mean(complaint_cnt), #average complaints per month
+            complaints= sum(complaint_cnt), #total complaints
             phone_serv = last(with_phone_service)) %>% #Last info about using phone service
   mutate(ftto = case_when(
     str_detect(last_band, "FTTO") ~ 1,
@@ -117,20 +144,18 @@ churn_oc <- churn_tr %>%
 
 ```
 
-We are left with a dataset of 6210 unique customers and 9 features.  
-6 floats,  
+We are left with a dataset of 26763 unique customers and 9 features.  
+7 floats,  
 3 integers  
 ```{python}
 r.churn_oc.info()
 ```
 
-Here we will do a quick survival analysis with an general overview about wether churn changes at some points of clients tenure and also how different variables have an effect on that. But mostly to extract a cox hazard ratio score for clients as a feature to use in the xgboost classifier. With more space (and time) different types of scores could be extracted and tested but here we will stick with the cox hazard ratio. We will also look at a correlation plot to see how our features correlate with eachother and also because big multicolinearity can be problematic for the cox hazard ratio. This doesn't play a big role in our case because we are interested in its relevance as a feature in the xgboost machine which will be seen later.
-```{r}
-rcorr(as.matrix(churn_oc), type = "spearman")
-cor(as.matrix(churn_oc))
-corrplot(cor(as.matrix(churn_oc)))
+Here we will do a quick survival analysis with an general overview about wether churn changes at some points of clients tenure and also how different variables have an effect on that. The main goal is to extract a cox hazard ratio score for clients as a feature to use in the xgboost classifier. With more space (and time) different types of scores could be extracted and tested, but here we will stick with the cox hazard ratio. 
 
-coxmod1 <- coxph(Surv(tenure, churn) ~ contract_month  + last_band +complaint_avg + phone_serv + ftto + secured_revenue, data = churn_oc)
+The survival curve shows us that survival probability goes down pretty linearly as tenure grows. Around a year 
+```{r}
+coxmod1 <- coxph(Surv(tenure, churn) ~ contract_month  + last_band +complaints + phone_serv + ftto + secured_revenue + ce_expiry, data = churn_oc)
 summary(coxmod1)
 
 ggsurvplot(survfit(coxmod1), data = churn_oc, 
@@ -143,7 +168,7 @@ churn_oc <- churn_oc %>%
 ```
 
 
-Percentage of people churned is a lot lower so a there is a lot of class imbalance. I am going to use oversampling to mediate this problem.
+Percentage of people churned is a lot lower so a there is quite a bit of class imbalance. I am going to use oversampling to mediate this problem.
 ```{r}
 churn_oc %>% 
   ggplot(aes(x = as.factor(churn), fill = as.factor(churn))) +
@@ -195,7 +220,7 @@ Now we will use kmeans clustering for feature generation for the xgboost model.
 ```{r}
 #removing not needed columns
 churn_km <- churn_oc %>% 
-  select(-term_read_code & -term_reas_desc & -churn & -newacct_no) 
+  select(-churn) 
 ```
 
 ```{python}
@@ -222,8 +247,8 @@ Mapping these clusters onto our variables we can observe that:
 2) Cluster 2 is higher in tenure and also higher on contract length notably. In cluster number 2 most people don't have phone service. 
 3) In cluster 0 most people have phone service
 
-```{r}
-churn_km
+```{python}
+churn_km["kclusters"].unique()
 ```
 
 ```{python}
@@ -237,6 +262,8 @@ plt.show()
 sns.jointplot(x='ce_expiry', y='contract_month', data=churn_km, hue='kclusters', palette='Dark2')
 plt.show()
 ```
+
+WHY IS THIS NOT WORKING?????
 
 ```{r}
 churn_oc %>% 
@@ -254,8 +281,6 @@ churn_oc %>%
   labs(title = "Relationship between churn and some categorical variables")
 ```
 
-
-
 Lastly i will run xgboost to and predict churn
 ```{python}
 import matplotlib.ticker as mtick 
@@ -271,52 +296,36 @@ from xgboost import plot_importance
 plt.style.use('ggplot')
 ```
 
+```{python}
+churn_dummies = pd.get_dummies(churn_km) #one-hot encoding
+```
+
 ```{r}
-churn_xg <- churn_oc %>% 
-  select(-term_read_code & -term_reas_desc & -newacct_no) 
+churn_dummies <- py$churn_dummies %>% 
+  bind_cols(churn = churn_oc$churn)
+
+cor(as.matrix(churn_dummies))
+corrplot(cor(as.matrix(churn_dummies)))
 ```
 
 ```{python}
-churn_dummies = pd.get_dummies(r.churn_xg) #one-hot encoding
-```
-
-```{python}
-plt.figure(figsize=(10,10)
-plt.style.use('ggplot')
-my_cmap = cm.get_cmap('Accent')
-churn_corr = churn_dummies.corr()['churn'].sort_values(ascending = False)
-churn_corr.iloc[1:].plot(kind='barh', cmap=my_cmap)
-
-plt.title('Correlation with churn',fontsize=20)
-plt.xlabel('correlation', fontsize=13)
-plt.ylabel('feature',fontsize=13)
-
-plt.tight_layout()
-plt.xticks(fontsize = 15) 
-plt.yticks(fontsize = 12) 
-plt.grid(True)
-plt.show() 
-```
-
-```{python}
-churn_corr = churn_dummies.corr()['churn'].sort_values(ascending = False)
-churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values].info() 
-```
-
-```{python}
-features = churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values].columns.values
+features = r.churn_dummies.loc[:, r.churn_dummies.columns != 'churn'].columns
 
 scaler  = MinMaxScaler(feature_range=(0,1))
 
-scaler.fit(churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values]) 
+scaler.fit(r.churn_dummies.loc[:, r.churn_dummies.columns != 'churn'])
 
-churn_dummies = pd.DataFrame(scaler.transform(churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values])) 
+churn_dummies = pd.DataFrame(scaler.transform(r.churn_dummies.loc[:, r.churn_dummies.columns != 'churn']))
 
 churn_dummies.columns = features
 ```
 
+SIIIT EDASI
+
+
+
 ```{python}
-y = churn_dummies['churn'].values
+y = r.churn_dummies['churn']
 x = churn_dummies.drop(columns = ['churn'])
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)
