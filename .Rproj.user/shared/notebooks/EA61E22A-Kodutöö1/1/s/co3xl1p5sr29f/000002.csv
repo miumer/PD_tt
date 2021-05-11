@@ -1,0 +1,73 @@
+"0","```r
+```r
+library(grid)
+library(tidyverse)
+
+eyecolor = tibble(
+  eye = c(\Pruun\, \Pruun\, \Sinine\, \Sinine\, \Helepruun\, \Helepruun\, \Roheline\, \Roheline\),
+  gender = c(\Mees\, \Naine\, \Mees\, \Naine\, \Mees\, \Naine\, \Mees\, \Naine\),
+  count = c(98, 122, 101, 114, 47, 46, 33, 31)
+)
+
+eyecolor <- eyecolor %>% 
+  mutate(eye_scaled = as.numeric(as.factor(eye))/(length(unique(eye))+1)) %>% 
+  mutate(gndr_scaled = (as.numeric(factor(gender))-1)/length(unique(gender))*0.1) %>% 
+  mutate(eye_gndr_scaled = eye_scaled+gndr_scaled) %>%
+  mutate(gender_color = hcl.colors(2)[gender %>% as.factor() %>% as.numeric()]) %>% 
+  mutate(count_scaled = count / max(count))
+                                            
+grid.newpage()
+  
+# Legend
+pushViewport(viewport(x = 0.8, y = 0, height = 1, width = 0.2, just = c(0, 0)))
+```
+```r
+grid.rect(x = 0.025, y = 0.55, height = 0.03, width =0.1,
+          gp = gpar(col = hcl.colors(2)[2], fill = hcl.colors(2)[2]))
+grid.rect(x = 0.025, y = 0.60, height = 0.03, width =0.1,
+          gp = gpar(col = hcl.colors(2)[1], fill = hcl.colors(2)[1]))
+```
+```r
+grid.text(label = \Naine\, x = 0.25, 0.55)
+grid.text(label = \Mees\, x = 0.25, 0.6)
+```
+```r
+popViewport()
+  
+# Graafik
+pushViewport(viewport(x = 0.8, y = 0.9, height = 0.75, width = 0.7, just = c(1, 1)))
+```
+```r
+grid.rect(x = eyecolor$eye_gndr_scaled, y = 0, just = c(1,0), height = eyecolor$count_scaled, width = 0.05, gp = gpar(col = eyecolor$gender_color, fill = eyecolor$gender_color))
+grid.xaxis(at = c(0.2, 0.4, 0.6, 0.8), label = c(\Helepruun\, \Pruun\, \Roheline\, \Sinine\))
+```
+```r
+grid.yaxis(at = grid.pretty(c(0, 122))/ max(eyecolor$count), label = grid.pretty(c(0, 122)))
+popViewport()
+```
+```r
+  
+# Pealkiri
+pushViewport(viewport(x = 0.8, y = 0.9, height = 0.1, width = 0.7, just = c(1, 0)))
+grid.text(x = 0, y = 0.15, label = \Statistikute silmavärv\, just = c(0, 0), gp = gpar(fontsize = 20))
+```
+```r
+popViewport()
+  
+# x - telg
+pushViewport(viewport(x = 0.8, y = 0.15, height = 0.15, width = 0.7, just = c(1, 1)))
+```
+```r
+grid.text(x = 0.5, y = 0.1, label = \Silmavärv\, just = c(0.5, 0))
+popViewport()
+```
+```r
+  
+# y - telg
+pushViewport(viewport(x = 0, y = 0.15, height = 0.75, width = 0.1, just = c(0, 0)))
+grid.text(x = 0.2, y = 0.5, label = \Arv\, just = c(0, 0.5), rot = 90)
+```
+```r
+popViewport()
+```
+```"

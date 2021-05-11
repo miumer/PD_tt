@@ -1,0 +1,26 @@
+"0","```r
+```r
+library(ggplot2)
+library(tidyverse)
+
+load(\linnad.RData\, verbose = T)
+```
+```"
+"1","Loading objects:
+  linnad
+"
+"0","```r
+```r
+ggplot(linnad, aes(x=factor(Poverty_factor, levels=c(\Low\, \Medium\, \High\)), y = govt_employed, color = unemployment_rate))+
+  geom_point(position = \jitter\)+
+  ggtitle(\Poverty and government as employee\)+
+  xlab(\Povery factor\)+
+  scale_y_continuous(name = \Percentage of government employees\, limits = c(0,70), breaks = c(0,20,40,60))+
+  scale_colour_gradient(name = \Unemployment rate\, low = \red\, high = \black\, breaks = c(5, 10, 15, 20))+
+  geom_hline(yintercept = 30, linetype = \dashed\) +
+  facet_wrap(~State) +
+  theme_bw()+
+  theme(legend.position = c(1,0.45), legend.justification = c(1, 1),
+        strip.background =element_rect(fill=\#FFD700\))
+```
+```"

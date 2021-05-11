@@ -1,0 +1,343 @@
+---
+title: "Pipedrive test task"
+author: "Siim Põldre"
+date: "5 5 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE, message = FALSE}
+library(tidyverse)
+library(psych)
+library(kableExtra)
+library(patchwork)
+library(pheatmap)
+library(reticulate)
+library(scales)
+library(RColorBrewer)
+library(corrplot)
+library(Hmisc)
+```
+
+TRY TO AUTOMAICALLY ACCESS FILE FROM KAGGLE.
+
+1)Data tranformations
+2)General descriptives
+3)Logistic regression on raw data
+4)Clustering and cluster analsys (how clusters differ + logistic regression using clusters with baseline)
+5)XGBoost and feature analysis
+
+I chose a dataset from kaggle that deals with a broadband companies churn. The dataset is from january 2020. I chose this specific dataset firstly because of its content. It is a subscription based service that offers several packages(Bandwidth) and has to deal with churn. This is similar to the types of data Pipedrive probably deals with and churn is a problem in any company. Secondly the features have nice metadata so i understand more clearly what i am looking at. The interesting thing with this dataset is that each customer has a row for each month they are a customer (~500k rows alltogether) which is good for survival analysis but for rest of the analysis i am planning to do it is better to have the data in a format where each customer has one row. For this i will transform the dataset.
+```{r}
+churn_tr <- read.csv("bbs_cust_base_scfy_20200210.csv", header = TRUE)
+```
+
+There are some missing values but for two features the percentages are very low (under 1%) so they are not probably a major cause for concern when we remove these lines.
+```{r}
+Puuduvad <- churn_tr %>% 
+  summarise_all(funs(sum(is.na(.)))) %>% 
+  pivot_longer(everything(), names_to = "Feature", values_to = "Missing") 
+
+Puuduvad %>% 
+  mutate(Prop.missing = round(`Missing`/nrow(churn_tr),4)) %>%
+  filter(Missing > 0) %>% 
+  arrange(., desc(Missing)) %>% 
+  kbl() %>% 
+  kable_styling()
+
+churn_tr <- churn_tr %>% 
+  drop_na()
+```
+
+There are:  
+- 14 categorical variables  
+- 5 integers (more caution in interpreting descriptives as numeric)
+- 1 numeric variables
+
+The data has ~510k rows and 20 columns. Secured revenue is the only numeric/float variable. I will treat image and contract month as categorical variables (altho they are ordinal). Image because it is actually a date variable about billing month and contract month because it has a more categorical character being a contract type or category.
+```{python}
+r.churn_tr.info()
+```
+
+Looking at variables to see if some have 0 variance to remove them:
+1) bill_cycl has no variance so we don't need that variable (labeled as ignorable in the data source too)
+2)serv_type also has only one value(BBS)
+```{r}
+churn_tr %>%
+  lapply(unique) %>% 
+  lapply(length)
+```
+
+Some variables are not explained and just said that they can be ignored. I will remove some of them here. Two of them have 0 variance as said. 
+```{r}
+churn_tr <- churn_tr %>% 
+  select(-bill_cycl & -serv_type & -line_stat) #getting rid of variable with no variance
+```
+
+We will cut out people whose contract hasn't ended yet because they cannot reasonably be expected to churn. So we are only focusing on people whose contract has ended.
+```{r}
+churn_tr <- churn_tr %>% 
+  filter(ce_expiry < 0)
+```
+
+Putting the dataset in more workable format and doing some feature engineering below. 
+
+Some notes:  
+1) Removing customers who passed away
+2) I will use average secured revenue per month for each client
+3) I will use average complaints per month for each client
+4) I Will not use variables image, contract dates (features extracted from them are used), and current_mth_churn, because they don't seem to give any additional information
+5) Bandwidth will be coded as ordinal variable because it can be concidered a variable where each package is "better" or "higher" than the previous one
+```{r}
+churn_oc <- churn_tr %>%
+  filter(complaint_cnt %in% c("0","1", "2", "3", "4", "5", "6", "7")) %>% 
+  mutate(complaint_cnt = as.numeric(complaint_cnt)) %>% 
+  group_by(newacct_no) %>%
+  summarise(churn = first(churn), #is churned or not
+            term_read_code = last(term_reas_code), #termination reason code
+            term_reas_desc = last(term_reas_desc), #termination reason description  
+            tenure = (max(tenure)-min(tenure)), #Tenure
+            contract_month = first(contract_month), #contract length
+            ce_expiry = first(ce_expiry), #ifference between contract and jan 2020
+            secured_revenue = mean(secured_revenue), #log average revenue (could also use total revenue)
+            last_band = last(bandwidth), #last known bandwidth
+            complaint_avg = mean(complaint_cnt), #average complaints per month
+            phone_serv = last(with_phone_service)) %>% #Last info about using phone service
+  mutate(ftto = case_when(
+    str_detect(last_band, "FTTO") ~ 1,
+    TRUE ~ 0
+  )) %>% #wether has FTTO service or not
+  mutate(last_band = recode(last_band, `BELOW 10M` = 0, `10M` = 1, `30M` = 2, `50M` = 3, `100M` = 4, `100M (FTTO)` = 5, `300M (FTTO)` = 6, `500M (FTTO)` = 7, `1000M (FTTO)` =8)) %>% #bandwidth package
+  mutate(churn = recode(churn, Y = 1, N = 0)) %>%  #churn as numeric
+  mutate(phone_serv = recode(phone_serv, Y = 1, N = 0)) %>%  #phone service as numeric
+  select(-newacct_no & -term_read_code & -term_reas_desc)
+
+```
+
+We are left with a dataset of 6210 unique customers and 9 features.  
+6 floats,  
+3 integers  
+```{python}
+r.churn_oc.info()
+```
+
+Here we will do a quick survival analysis with an general overview about wether churn changes at some points of clients tenure and also how different variables have an effect on that. But mostly to extract a cox hazard ratio score for clients as a feature to use in the xgboost classifier. With more space (and time) different types of scores could be extracted and tested but here we will stick with the cox hazard ratio. We will also look at a correlation plot to see how our features correlate with eachother and also because big multicolinearity can be problematic for the cox hazard ratio. This doesn't play a big role in our case because we are interested in its relevance as a feature in the xgboost machine which will be seen later.
+```{r}
+rcorr(as.matrix(churn_oc), type = "spearman")
+cor(as.matrix(churn_oc))
+corrplot(cor(as.matrix(churn_oc)))
+
+coxmod1 <- coxph(Surv(tenure, churn) ~ contract_month  + last_band +complaint_avg + phone_serv + ftto + secured_revenue, data = churn_oc)
+summary(coxmod1)
+
+ggsurvplot(survfit(coxmod1), data = churn_oc, 
+           censor = F, 
+           surv.median.line = "hv", 
+           ggtheme = theme_minimal())
+
+churn_oc <- churn_oc %>% 
+  bind_cols(risk = predict(coxmod1, churn_oc, type = "risk"))
+```
+
+
+Percentage of people churned is a lot lower so a there is a lot of class imbalance. I am going to use oversampling to mediate this problem.
+```{r}
+churn_oc %>% 
+  ggplot(aes(x = as.factor(churn), fill = as.factor(churn))) +
+  geom_bar(aes(y = (..count..)/sum(..count..))) + 
+  scale_y_continuous(labels = percent) +
+  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = -0.25) +
+  theme_minimal()+
+  theme(axis.text.y=element_blank(), 
+        axis.ticks=element_blank(),
+        axis.title.y=element_blank(),
+        legend.position = "none")+
+  scale_fill_brewer(palette = "Set1")
+```
+
+!!!!!!!!!!!!!!!!WORK ON THESE!!!!!!!!!!!!!!!!
+
+Some observations from descriptive statistics:
+1) Most people have used 1 - 2 services
+2) Average tenure is around 17.54 with median at 23. For 50% of people its between 12 and 23
+3) Contracts expire on average in 5.8 months (can also be negative if expired before jan 2020)
+4) Average secured revenue per month is 550 on average with a median on 226. It is highly skewed.
+5) Average number of complaints per month is 0 but maximum is 5 (while actual maximum complaints in a single month is 7)
+```{r}
+churn_oc %>%
+  select_if(~class(.) != 'character') %>%
+  describe(., IQR = TRUE,quant = c(.25, .75)) %>%
+  kbl() %>% 
+  kable_styling()
+```
+
+From visual assessment we can see that: 
+1)people not using a phone service are more likely to churn
+2)people using lower bandwidth packages are more likely to churn
+```{r}
+churn_oc %>%
+  select(-term_read_code, -term_reas_desc) %>%  #uninformative variables in this case
+  select_if(~class(.) == 'character') %>%
+  pivot_longer(!churn, names_to = c("feature"), values_to = c("value")) %>% 
+  ggplot(aes(x = value, fill = churn))+
+  geom_bar(position = "fill") +
+  theme_minimal()+
+  coord_flip()+
+  scale_fill_brewer(palette = "Dark2")+
+  facet_wrap(~feature, scales = "free")+
+  labs(title = "Relationship between churn and some categorical variables")
+```
+
+Now we will use kmeans clustering for feature generation for the xgboost model.
+```{r}
+#removing not needed columns
+churn_km <- churn_oc %>% 
+  select(-term_read_code & -term_reas_desc & -churn & -newacct_no) 
+```
+
+```{python}
+#scaling the variables
+import numpy as np
+import pandas as pd 
+from sklearn.preprocessing import scale
+churn_km = pd.DataFrame(scale(r.churn_km), index = r.churn_km.index, columns = r.churn_km.columns)
+```
+
+I found 4 clusters to be the most informative
+```{python}
+from sklearn.cluster import KMeans
+modelk = KMeans(n_clusters=4)
+modelk.fit(churn_km)
+churn_km['kclusters'] = modelk.predict(churn_km)
+```
+
+!!!!!!!!!!!!WORK ON THEESEEE!!!!!!!!!!!!!!!!!!!!
+
+Mapping these clusters onto our variables we can observe that:
+1) People who have churned most belong to cluster number 1 while people who have not churned belong to clusters  0 and 2 
+2) Cluster number 1 is also lower on tenure and (makes sense because churners will have lower tenure) and lower on contract expiry (also makes sense because churners contracts are more likely to be expired logically). In cluster 1 many more people also have phone service than don't have it. 
+2) Cluster 2 is higher in tenure and also higher on contract length notably. In cluster number 2 most people don't have phone service. 
+3) In cluster 0 most people have phone service
+
+```{r}
+churn_km
+```
+
+```{python}
+import seaborn as sns
+import matplotlib.pyplot as plt
+sns.jointplot(x='risk', y='last_band', data=churn_km, hue='kclusters', palette='Set1')
+plt.show()
+```
+
+```{python}
+sns.jointplot(x='ce_expiry', y='contract_month', data=churn_km, hue='kclusters', palette='Dark2')
+plt.show()
+```
+
+```{r}
+churn_oc %>% 
+  cbind(py$churn_km$kclusters) %>%
+  select(-term_read_code, -term_reas_desc) %>%  #uninformative variables in this case
+  mutate(kclusters = as.character(`py$churn_km$kclusters`)) %>% 
+  select_if(~class(.) == 'character') %>%
+  pivot_longer(!kclusters, names_to = c("feature"), values_to = c("value")) %>% 
+  ggplot(aes(x = value, fill =kclusters))+
+  geom_bar(position = "fill") +
+  theme_minimal()+
+  coord_flip()+
+  scale_fill_brewer(palette = "Dark2")+
+  facet_wrap(~feature, scales = "free")+
+  labs(title = "Relationship between churn and some categorical variables")
+```
+
+
+
+Lastly i will run xgboost to and predict churn
+```{python}
+import matplotlib.ticker as mtick 
+from sklearn.preprocessing import MinMaxScaler
+from sklearn import metrics
+from sklearn.ensemble import RandomForestClassifier
+import matplotlib.cm as cm
+from sklearn.preprocessing import normalize
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from xgboost import plot_importance
+
+plt.style.use('ggplot')
+```
+
+```{r}
+churn_xg <- churn_oc %>% 
+  select(-term_read_code & -term_reas_desc & -newacct_no) 
+```
+
+```{python}
+churn_dummies = pd.get_dummies(r.churn_xg) #one-hot encoding
+```
+
+```{python}
+plt.figure(figsize=(10,10)
+plt.style.use('ggplot')
+my_cmap = cm.get_cmap('Accent')
+churn_corr = churn_dummies.corr()['churn'].sort_values(ascending = False)
+churn_corr.iloc[1:].plot(kind='barh', cmap=my_cmap)
+
+plt.title('Correlation with churn',fontsize=20)
+plt.xlabel('correlation', fontsize=13)
+plt.ylabel('feature',fontsize=13)
+
+plt.tight_layout()
+plt.xticks(fontsize = 15) 
+plt.yticks(fontsize = 12) 
+plt.grid(True)
+plt.show() 
+```
+
+```{python}
+churn_corr = churn_dummies.corr()['churn'].sort_values(ascending = False)
+churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values].info() 
+```
+
+```{python}
+features = churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values].columns.values
+
+scaler  = MinMaxScaler(feature_range=(0,1))
+
+scaler.fit(churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values]) 
+
+churn_dummies = pd.DataFrame(scaler.transform(churn_dummies[pd.DataFrame(churn_corr[(churn_corr > 0.01) | (churn_corr < -0.01)]).index.values])) 
+
+churn_dummies.columns = features
+```
+
+```{python}
+y = churn_dummies['churn'].values
+x = churn_dummies.drop(columns = ['churn'])
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)
+```
+
+```{python}
+xgb_model = xgb.XGBClassifier(max_depth=5, gamma = 0.1 , learning_rate=0.08, objective= 'binary:logistic',n_jobs=-1, random_seed=0).fit(x_train, y_train)
+
+prediction_testx = xgb_model.predict(x_test)
+
+print('Accuracy of XGB classifier on training set: {:.2f}'
+       .format(xgb_model.score(x_train, y_train)))
+
+print('Accuracy of XGB classifier on test set: {:.2f}'
+       .format(xgb_model.score(x_test[x_train.columns], y_test)))
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(10,8))
+plot_importance(xgb_model, ax=ax);
+plt.tight_layout()
+plt.show()
+```
+

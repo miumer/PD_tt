@@ -1,0 +1,3 @@
+"0","ee9$fcldage <- ee9$fcldbrn - ee9$yrbrn"
+"0",""
+"0","wtd.hist(ee9$fcldage, weight = ee9$pspwght, breaks = 25, freq = T)"

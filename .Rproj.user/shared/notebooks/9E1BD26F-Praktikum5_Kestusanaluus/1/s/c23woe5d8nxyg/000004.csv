@@ -1,0 +1,10 @@
+"0",""
+"0","library(survminer)"
+"2","Loading required package: ggpubr
+"
+"0","#Siit saame järeldada, et noorem põlvkond saab hilisemas vanuses lapsi."
+"0","ggsurvplot(fit_yrbrn, data = ee9_41, conf.int = TRUE, "
+"0","           censor = F, #meid ei huvita tsenseeritud inimesed "
+"0","           legend.labs = c(""1928-60"", ""1961-80"", ""1981-2003""), "
+"0","           surv.median.line = ""hv"", #tahame mediaaniväärtusied ka "
+"0","           ggtheme = theme_minimal())"

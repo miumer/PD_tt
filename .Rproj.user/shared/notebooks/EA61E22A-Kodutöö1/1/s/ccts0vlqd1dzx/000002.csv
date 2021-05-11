@@ -1,0 +1,174 @@
+"0","```r
+library(ggplot2)
+library(tidyverse)
+library(RColorBrewer)
+library(patchwork)
+library(sjmisc)
+```"
+"1","
+Attaching package: ‘sjmisc’
+
+The following object is masked from ‘package:purrr’:
+
+    is_empty
+
+The following object is masked from ‘package:tidyr’:
+
+    replace_na
+
+The following object is masked from ‘package:tibble’:
+
+    add_case
+"
+"0","```r
+load(\"countries.RData\", verbose = T)
+```"
+"1","Loading objects:
+  countries
+"
+"0","```r
+#populatsioonid kvantiilide põhjal 4ks kategooriaks
+countries$pop_grouped <- split_var(countries$population_total, n = 4) 
+
+#eralduskohad
+splits <- prettyNum(quantile(countries$population_total, c(.25,.50,.75,1), names = FALSE),big.mark=\",\", scientific = FALSE) 
+
+#Populatsioonikategooriate nimed
+nimed <- c(paste0(\"0-\",splits[1]),
+           paste0(splits[1],\"-\",splits[2]),
+           paste0(splits[2],\"-\",splits[3]),
+           paste0(splits[3],\"-\",splits[4]))
+
+countries$pop_grouped <- factor(countries$pop_grouped, labels = nimed) 
+
+#Muude tunnuse faktorite järjestus ja nimed
+countries <- countries %>% 
+  mutate(income_groups = factor(income_groups, levels = c(\"low_income\", \"lower_middle_income\", 
+                                                          \"upper_middle_income\", \"high_income\"))) %>% 
+  mutate(income_groups_est = recode(income_groups,  low_income = \"Madal sissetulek\",  lower_middle_income = \"Madal keskmine sissetulek\",
+                                 upper_middle_income = \"Kõrge keskmine sissetulek\",  high_income = \"Kõrge sissetulek\")) %>% 
+  mutate(region_est = recode(region,  africa = \"Aafrika\",  americas = \"Ameerika\",
+                                 asia = \"Aasia\",  europe = \"Euroopa\"))
+
+#Üldine graafik
+general <- ggplot(countries, aes(x=child_per_woman, y = life_expectancy))+
+  geom_point(aes(shape = region_est, size = log(population_total), color = income_groups_est), alpha = 0.7)+
+  geom_smooth(method=\"lm\")+
+  xlab(label = \"Lapsi naise kohta\")+
+  ylab(label = \"Oodatav eluiga\")+
+  scale_colour_manual(values = c(\"#ffffb2\", \"#fecc5c\", \"#fd8d3c\", \"#e31a1c\"))+
+  theme(panel.background = element_rect(fill = \"gray15\"))+
+  theme(plot.background = element_rect(fill = \"lightgray\", 
+                                       colour = \"gray30\", 
+                                       size = 2))+
+  theme(legend.background = element_rect(fill= \"lightgray\"))+
+  theme(axis.text.x = element_text(face = \"bold\", 
+                                   color = \"black\", 
+                                   size = 10),
+          axis.text.y = element_text(face = \"bold\", 
+                                     color = \"black\", 
+                                     size = 10))+
+  theme(axis.title.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 12),
+          axis.title.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 12))+
+  theme(legend.key=element_rect(fill = \"gray30\"), 
+        legend.key.size = unit(2,\"line\"), 
+        legend.title=element_text(size=15),
+        legend.text=element_text(size=13))+
+  theme(legend.position = c(1,1), 
+        legend.justification = c(1, 1), 
+        legend.box = \"horizontal\")+
+  guides(shape = guide_legend(override.aes = list(size=4)))+
+  guides(colour = guide_legend(override.aes = list(size=4)))+
+  labs(color = \"Sissetulek\", fill = \"Sissetulek\", size = \"log(populatsioon)\", shape = \"Piirkond\")+
+  ggtitle(label = \"Suhe laste arvu ja oodatava eluea vahel\")
+
+#Sissetulekut arvestav graafik
+incm_plt <- ggplot(countries, aes(x=child_per_woman, y = life_expectancy, color = income_groups_est))+
+    geom_point(alpha = 0.7, size = 3)+
+    geom_smooth(aes(fill = income_groups_est), method=\"lm\")+
+    xlab(label = \"Lapsi naise kohta\")+
+    ylab(label = \"Oodatav eluiga\")+
+    scale_colour_manual(values = c(\"#ffffb2\", \"#fecc5c\", \"#fd8d3c\", \"#e31a1c\"))+
+    scale_fill_manual(values = c(\"#ffffb2\", \"#fecc5c\", \"#fd8d3c\", \"#e31a1c\"))+
+    theme(panel.background = element_rect(fill = \"gray15\"))+
+    theme(plot.background = element_rect(fill = \"lightgray\", colour = \"gray30\", size = 2))+
+    theme(legend.background = element_rect(fill= \"lightgray\"))+
+    theme(legend.position = c(1,1), legend.justification = c(1, 1))+
+    theme(axis.text.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 10),
+          axis.text.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 10))+
+    theme(axis.title.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 12),
+          axis.title.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 12))+
+    theme(legend.key=element_rect(fill = \"gray30\"),
+          legend.key.size = unit(2,\"line\"), 
+          legend.title=element_text(size=12),
+          legend.text=element_text(size=10))+
+    guides(size=FALSE)+
+    labs(color = \"Sissetulek\", fill = \"Sissetulek\")+
+    ggtitle(label = \"Suhe laste arvu ja oodatava eluea vahel \narvestades sissetulekuga\")
+
+#Piirkonda arvestav graafik
+rgn_plt <- ggplot(countries, aes(x=child_per_woman, y = life_expectancy, colour = region_est))+
+    geom_point(aes(shape = region_est), alpha = 0.7, size = 4)+
+    geom_smooth(aes(fill = region_est), method=\"lm\")+
+    xlab(label = \"Lapsi naise kohta\")+
+    ylab(label = \"Oodatav eluiga\")+
+    scale_colour_brewer(palette = \"Dark2\")+
+    scale_fill_brewer(palette = \"Dark2\")+
+    theme(panel.background = element_rect(fill = \"gray15\"))+
+    theme(plot.background = element_rect(fill = \"lightgray\", colour = \"gray30\", size = 2))+
+    theme(legend.background = element_rect(fill= \"lightgray\"))+
+    theme(legend.position = c(1,1), legend.justification = c(1, 1), legend.box = \"horizontal\")+
+    theme(axis.text.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 10),
+          axis.text.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 10))+
+    theme(axis.title.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 12),
+          axis.title.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 12))+
+    theme(legend.key=element_rect(fill = \"gray30\"),
+          legend.key.size = unit(2,\"line\"), 
+          legend.title=element_text(size=15),
+          legend.text=element_text(size=13))+
+    theme(legend.key.size = unit(2,\"line\"))+
+    labs(colour = \"Piirkond\", shape = \"Piirkond\", fill = \"Piirkond\")+
+    guides(size = FALSE)+
+    ggtitle(label = \"Suhe laste arvu ja oodatava eluea vahel \narvestades piirkonnaga\")
+
+#Populatsiooni arvestav graafik
+pop_plt <- ggplot(countries, aes(x=child_per_woman, y = life_expectancy, color = pop_grouped))+
+    geom_point(aes(size = log(population_total)), alpha = 0.7)+
+    geom_smooth(aes(fill = pop_grouped), method=\"lm\")+
+    xlab(label = \"Lapsi naise kohta\")+
+    ylab(label = \"Oodatav eluiga\")+
+    scale_colour_manual(values = c(\"#ffffcc\", \"#a1dab4\", \"#41b6c4\", \"#225ea8\"))+
+    scale_fill_manual(values = c(\"#ffffcc\", \"#a1dab4\", \"#41b6c4\", \"#225ea8\"))+
+    theme(panel.background = element_rect(fill = \"gray15\"))+
+    theme(plot.background = element_rect(fill = \"lightgray\", colour = \"gray30\", size = 2))+
+    theme(legend.background = element_rect(fill= \"lightgray\"))+
+    theme(legend.position = c(1,1), legend.justification = c(1, 1), legend.box = \"horizontal\")+
+    theme(axis.text.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 10),
+          axis.text.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 10))+
+  theme(axis.title.x = element_text(face = \"bold\", color = \"black\", 
+                           size = 12),
+          axis.title.y = element_text(face = \"bold\", color = \"black\", 
+                           size = 12))+
+    theme(legend.key=element_rect(fill = \"gray30\"),
+          legend.key.size = unit(1,\"line\"), 
+          legend.title=element_text(size=12),
+          legend.text=element_text(size=10))+
+    labs(size = \"log(populatsioon)\", fill = \"Populatsiooni vahemik\", color = \"Populatsiooni vahemik\") +
+    ggtitle(label = \"Suhe laste arvu ja oodatava eluea vahel \narvestades populatsiooniga\")
+
+board <- general / (incm_plt | rgn_plt | pop_plt)
+
+ggsave(\"kodutoo_plot1.png\", board, width = 50, height = 30, units = \"cm\")
+```"

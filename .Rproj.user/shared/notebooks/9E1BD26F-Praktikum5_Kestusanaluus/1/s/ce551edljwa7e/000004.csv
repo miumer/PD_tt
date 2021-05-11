@@ -1,0 +1,6 @@
+"0",""
+"0","ggsurvplot(fit_eduyrs, data = ee9_41, conf.int = TRUE, "
+"0","           censor = F, "
+"0","           legend.labs = c(""0-9"", ""10-12"", ""13-15"", ""16+""), "
+"0","           surv.median.line = ""hv"", "
+"0","           ggtheme = theme_minimal())"

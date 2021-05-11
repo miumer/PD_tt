@@ -1,0 +1,23 @@
+"0","```r
+pheatmap(t(mat[a_row_cnt_age$rowname,]),
+         main = \"Personality test heatmap\",
+         show_colnames = F, 
+         cluster_cols = F,
+         annotation_col = a_row_cnt_age[2:3],
+         annotation_row = a_col_warm,
+         annotation_names_row = F,
+         clustering_distance_col = \"euclidean\", 
+         clustering_method = \"ward.D2\",
+         cellheight = 8,
+         cellwidth = 0.7,
+         filename = \"kodutoo_heat3.png\",
+         height = 8,
+         width = 13,
+         cutree_row = 3,
+         color = colorRampPalette(c(\"#ffffcc\", \"#41b6c4\", \"#225ea8\"))(99),
+         annotation_colors = ann_cols)
+
+```"
+"1","no non-missing arguments to min; returning Infno non-missing arguments to max; returning -InfError in seq.int(rx[1L], rx[2L], length.out = nb) : 
+  'from' must be a finite number
+"

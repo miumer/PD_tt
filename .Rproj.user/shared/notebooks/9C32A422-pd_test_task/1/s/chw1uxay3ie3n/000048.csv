@@ -1,0 +1,3 @@
+"0",""
+"0","churn_oc <- churn_oc %>% "
+"0","  bind_cols(risk = predict(coxmod1, churn_oc, type = ""risk""))"

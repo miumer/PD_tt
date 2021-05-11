@@ -1,0 +1,4 @@
+"0","y = churn_dummies['churn'].values
+x = churn_dummies.drop(columns = ['churn'])
+
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0)"

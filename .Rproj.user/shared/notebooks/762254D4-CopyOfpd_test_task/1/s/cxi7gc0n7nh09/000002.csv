@@ -1,0 +1,16 @@
+"0","churn_oc %>%
+  select_if(~class(.) != 'character')%>%
+  cbind(churn_oc %>% select(churn)) %>%
+  mutate(secured_revenue = log(secured_revenue)) %>% #log transforming the revenue
+  pivot_longer(!churn, names_to = c(""feature""), values_to = c(""value"")) %>%
+  ggplot(aes(x = churn, fill = churn, y = value))+
+  geom_boxplot() + 
+  theme_minimal()+
+  scale_fill_brewer(palette = ""Dark2"")+
+  facet_wrap(~feature, scales = ""free"", nrow = 1)+
+  labs(title = ""Distributions for continuous"")
+"
+"2","Problem with `mutate()` input `secured_revenue`.
+[34mℹ[39m NaNs produced
+[34mℹ[39m Input `secured_revenue` is `log(secured_revenue)`."
+"2","NaNs produced"

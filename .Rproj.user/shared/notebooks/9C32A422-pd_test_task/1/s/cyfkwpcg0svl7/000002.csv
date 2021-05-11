@@ -1,0 +1,28 @@
+"1","<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 510125 entries, 0 to 510124
+Data columns (total 20 columns):
+ #   Column              Non-Null Count   Dtype  
+---  ------              --------------   -----  
+ 0   image               510125 non-null  int32  
+ 1   newacct_no          510125 non-null  object 
+ 2   line_stat           510125 non-null  object 
+ 3   bill_cycl           510125 non-null  int32  
+ 4   serv_type           510125 non-null  object 
+ 5   serv_code           510125 non-null  object 
+ 6   tenure              510125 non-null  int32  
+ 7   effc_strt_date      510125 non-null  object 
+ 8   effc_end_date       510125 non-null  object 
+ 9   contract_month      510125 non-null  int32  
+ 10  ce_expiry           510125 non-null  int32  
+ 11  secured_revenue     510125 non-null  float64
+ 12  bandwidth           510125 non-null  object 
+ 13  term_reas_code      510125 non-null  object 
+ 14  term_reas_desc      510125 non-null  object 
+ 15  complaint_cnt       510125 non-null  object 
+ 16  with_phone_service  510125 non-null  object 
+ 17  churn               510125 non-null  object 
+ 18  current_mth_churn   510125 non-null  object 
+ 19  X                   510125 non-null  object 
+dtypes: float64(1), int32(5), object(14)
+memory usage: 68.1+ MB
+"

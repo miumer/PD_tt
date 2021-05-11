@@ -1,0 +1,27 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1620201719560.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1964718888",
+    "id" : "2C6D3547",
+    "lastKnownWriteTime" : 1620674017,
+    "last_content_update" : 1620674017638,
+    "path" : "~/Dokumendid/R_Projects/PD_tt/pd_test_task.Rmd",
+    "project_path" : "pd_test_task.Rmd",
+    "properties" : {
+        "cursorPosition" : "145,102",
+        "last_setup_crc32" : "1A414399bb338d19",
+        "scrollLine" : "143",
+        "tempName" : "Untitled1"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

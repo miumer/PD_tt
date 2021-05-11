@@ -1,0 +1,94 @@
+"0","```r
+library(tidyverse)
+library(pheatmap)
+
+load(\"16PF.RData\", verbose = TRUE)
+```"
+"1","Loading objects:
+  mat
+  a_row
+  a_col
+"
+"0","```r
+a_row_cnt_age <- a_row %>%
+  filter(Age != 211) %>% 
+  arrange(Country, Age)
+
+a_col_warm <- a_col %>% 
+  select(QuestionGroupName)
+
+mat2 <- as.data.frame(mat) %>% 
+  mutate_at(vars(A8:A10), funs(recode(.,\"1\"=5, \"2\"=4, \"3\"=3, \"4\"=2, \"5\"=1))) %>% 
+  mutate_at(vars(C6:C10), funs(recode(.,\"1\"=5, \"2\"=4, \"3\"=3, \"4\"=2, \"5\"=1))) %>% 
+  mutate_at(vars(G6:G10), funs(recode(.,\"1\"=5, \"2\"=4, \"3\"=3, \"4\"=2, \"5\"=1))) %>% 
+  mutate_at(vars(I1:I6), funs(recode(.,\"1\"=5, \"2\"=4, \"3\"=3, \"4\"=2, \"5\"=1))) %>% 
+  mutate_at(vars(L1:L7), funs(recode(.,\"1\"=5, \"2\"=4, \"3\"=3, \"4\"=2, \"5\"=1)))
+```"
+"1","`funs()` was deprecated in dplyr 0.8.0.
+Please use a list of either functions or lambdas: 
+
+  # Simple named list: 
+  list(mean = mean, median = median)
+
+  # Auto named with `tibble::lst()`: 
+  tibble::lst(mean, median)
+
+  # Using lambdas
+  list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+"
+"1","`funs()` is deprecated as of dplyr 0.8.0.
+Please use a list of either functions or lambdas: 
+
+  # Simple named list: 
+  list(mean = mean, median = median)
+
+  # Auto named with `tibble::lst()`: 
+  tibble::lst(mean, median)
+
+  # Using lambdas
+  list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+[90mThis warning is displayed once every 8 hours.[39m
+[90mCall `lifecycle::last_warnings()` to see where this warning was generated.[39m
+"
+"0","```r
+row.names(a_col_warm) <- a_col$Question
+colnames(mat) <- a_col$Question
+
+mat2 <- as.matrix(mat2)
+
+colnames(mat2) <- a_col$Question
+
+ann_cols = list(Age = c(\"white\", \"firebrick\"),
+                Country = c(AU = \"#E41A1C\",
+                            GB = \"#377EB8\",
+                            IN = \"#4DAF4A\",
+                            PH = \"#984EA3\",
+                            PK = \"#FF7F00\",
+                            US = \"#FFFF33\"),
+                QuestionGroupName = c(`Emotional Stability` = \"#1B9E77\",
+                                      `Rule-Consciousness` = \"#E7298A\",
+                                      Sensitivity = \"#E6AB02\",
+                                      Vigilance = \"#666666\",
+                                      Warmth = \"#D95F02\"))
+                
+pheatmap(t(mat2[rownames(a_row_cnt_age),]),
+         main = \"Personality test heatmap\",
+         show_colnames = F, 
+         cluster_cols = F,
+         annotation_col = a_row_cnt_age,
+         annotation_row = a_col_warm,
+         annotation_names_row = F,
+         clustering_distance_col = \"euclidean\", 
+         clustering_method = \"ward.D2\",
+         cellheight = 8,
+         cellwidth = 0.7,
+         filename = \"kodutoo_heat2.png\",
+         height = 8,
+         width = 13,
+         cutree_row = 5,
+         color = colorRampPalette(c(\"#ffffcc\", \"#41b6c4\", \"#225ea8\"))(99),
+         annotation_colors = ann_cols,
+         border_color = black)
+```"
+"1","Error in mat2[rownames(a_row_cnt_age), ] : subscript out of bounds
+"

@@ -1,0 +1,5 @@
+"0","ee9_41$eduyrscat <- cut(ee9_41$eduyrs, c(0, 9, 12, 15, 30))"
+"0",""
+"0","fit_eduyrs <- survfit(Surv(fcldage2, bthcld01) ~ eduyrscat, data = ee9_41, weights = pspwght)"
+"0",""
+"0","plot(fit_eduyrs, col = c(""black"", ""red"", ""blue"", ""green""))"

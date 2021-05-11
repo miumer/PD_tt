@@ -1,0 +1,2 @@
+"0","churn_tr <- churn_tr %>% "
+"0","  filter(ce_expiry < 0)"
