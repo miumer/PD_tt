@@ -1,1 +1,0 @@
-"0","churn_tr <- read.csv(""bbs_cust_base_scfy_20200210.csv"", header = TRUE)"

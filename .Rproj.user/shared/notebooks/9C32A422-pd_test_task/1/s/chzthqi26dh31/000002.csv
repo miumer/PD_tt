@@ -1,2 +1,0 @@
-"0","churn_tr <- churn_tr %>% "
-"0","  select(-bill_cycl & -serv_type & -line_stat) #getting rid of variable with no variance"
